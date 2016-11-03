@@ -318,9 +318,9 @@ def p_field_seq(p):
 
 def p_field(p):
     '''field : field_id field_req field_type IDENTIFIER
-             | field_id field_req field_type IDENTIFIER '(' field_tags ')'
              | field_id field_req field_type IDENTIFIER '=' const_value '(' field_tags ')'
-             | field_id field_seq field_type IDENTIFIER '=' const_value'''
+             | field_id field_req field_type IDENTIFIER '(' field_tags ')'
+             | field_id field_req field_type IDENTIFIER '=' const_value'''
 
     if len(p) == 7:
         try:
