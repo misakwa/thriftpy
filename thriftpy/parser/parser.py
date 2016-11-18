@@ -436,6 +436,10 @@ include_dirs_ = ['.']
 thrift_cache = {}
 
 
+def _get_cache_key(prefix, use_slots=False):
+    return ('%s:slotted' % prefix) if use_slots else prefix
+
+
 def parse(path, module_name=None, include_dirs=None, include_dir=None,
           lexer=None, parser=None, enable_cache=True, use_slots=False):
     """Parse a single thrift file to module object, e.g.::
@@ -471,7 +475,8 @@ def parse(path, module_name=None, include_dirs=None, include_dir=None,
 
     global thrift_cache
 
-    cache_key = module_name or os.path.normpath(path)
+    cache_prefix = module_name or os.path.normpath(path)
+    cache_key = _get_cache_key(cache_prefix, use_slots)
 
     if enable_cache and cache_key in thrift_cache:
         return thrift_cache[cache_key]
@@ -545,8 +550,10 @@ def parse_fp(source, module_name, lexer=None, parser=None, enable_cache=True, us
         raise ThriftParserError('ThriftPy can only generate module with '
                                 '\'_thrift\' suffix')
 
+    cache_key = _get_cache_key(module_name, use_slots)
+
     if enable_cache and module_name in thrift_cache:
-        return thrift_cache[module_name]
+        return thrift_cache[cache_key]
 
     if not hasattr(source, 'read'):
         raise ThriftParserError('Except `source` to be a file-like object with'
@@ -569,7 +576,7 @@ def parse_fp(source, module_name, lexer=None, parser=None, enable_cache=True, us
     thrift_stack.pop()
 
     if enable_cache:
-        thrift_cache[module_name] = thrift
+        thrift_cache[cache_key] = thrift
     return thrift
 
 

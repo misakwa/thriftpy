@@ -3,7 +3,6 @@
 import pytest
 from thriftpy.thrift import TType
 from thriftpy.parser import load, load_fp
-from thriftpy.parser.parser import thrift_cache
 from thriftpy.parser.exc import ThriftParserError, ThriftGrammerError
 
 
@@ -264,7 +263,6 @@ def test_issue_215():
 
 
 def test_load_slots():
-    thrift_cache.clear()
     thrift = load('addressbook.thrift', use_slots=True)
 
     # normal structs will have slots
