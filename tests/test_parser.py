@@ -260,3 +260,27 @@ def test_issue_215():
     thrift = load('parser-cases/issue_215.thrift')
     assert thrift.abool is True
     assert thrift.falseValue == 123
+
+
+def test_load_slots():
+    thrift = load('addressbook.thrift', use_slots=True)
+
+    # normal structs will have slots
+    assert thrift.PhoneNumber.__slots__ == ['type', 'number', 'mix_item']
+    assert thrift.Person.__slots__ == ['name', 'phones', 'created_at']
+    assert thrift.AddressBook.__slots__ == ['people']
+
+    # exceptions will not have slots
+    assert not hasattr(thrift.PersonNotExistsError, '__slots__')
+
+    # services will not have slots
+    assert not hasattr(thrift.AddressBookService, '__slots__')
+
+    # enums will not have slots
+    assert not hasattr(thrift.PhoneType, '__slots__')
+
+    # one cannot get/set undefined attributes
+    person = thrift.Person()
+    with pytest.raises(AttributeError):
+        person.attr_not_exist = "Does not work"
+        person.attr_not_exist
