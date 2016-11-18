@@ -15,7 +15,7 @@ from ply import lex, yacc
 from .lexer import *  # noqa
 from .exc import ThriftParserError, ThriftGrammerError
 from thriftpy._compat import urlopen, urlparse
-from ..thrift import gen_init, TType, TPayload, TException
+from ..thrift import gen_init, TType, TPayload, TSPayload, TException
 
 
 def p_error(p):
@@ -209,15 +209,21 @@ def p_enum_item(p):
 
 def p_struct(p):
     '''struct : seen_struct '{' field_seq '}' '''
-    val = _fill_in_struct(p[1], p[3])
+    name, pos = p[1]
+    use_slots = p.parser.__use_slots__
+    val = _make_empty_struct(
+        name,
+        base_cls=TSPayload if use_slots else TPayload,
+        slots=_field_names(p[3]) if use_slots else [],
+    )
+    val = _fill_in_struct(val, p[3])
+    setattr(thrift_stack[pos], name, val)
     _add_thrift_meta('structs', val)
 
 
 def p_seen_struct(p):
     '''seen_struct : STRUCT IDENTIFIER '''
-    val = _make_empty_struct(p[2])
-    setattr(thrift_stack[-1], p[2], val)
-    p[0] = val
+    p[0] = (p[2], len(thrift_stack)-1)
 
 
 def p_union(p):
@@ -431,7 +437,7 @@ thrift_cache = {}
 
 
 def parse(path, module_name=None, include_dirs=None, include_dir=None,
-          lexer=None, parser=None, enable_cache=True):
+          lexer=None, parser=None, enable_cache=True, use_slots=False):
     """Parse a single thrift file to module object, e.g.::
 
         >>> from thriftpy.parser.parser import parse
@@ -452,6 +458,7 @@ def parse(path, module_name=None, include_dirs=None, include_dir=None,
     :param enable_cache: if this is set to be `True`, parsed module will be
                          cached, this is enabled by default. If `module_name`
                          is provided, use it as cache key, else use the `path`.
+    :param use_slots: if set to `True` uses slots for struct members
     """
     if os.name == 'nt' and sys.version_info < (3, 2):
         os.path.samefile = lambda f1, f2: os.stat(f1) == os.stat(f2)
@@ -473,6 +480,8 @@ def parse(path, module_name=None, include_dirs=None, include_dir=None,
         lexer = lex.lex()
     if parser is None:
         parser = yacc.yacc(debug=False, write_tables=0)
+
+    parser.__use_slots__ = use_slots
 
     global include_dirs_
 
@@ -515,7 +524,7 @@ def parse(path, module_name=None, include_dirs=None, include_dir=None,
     return thrift
 
 
-def parse_fp(source, module_name, lexer=None, parser=None, enable_cache=True):
+def parse_fp(source, module_name, lexer=None, parser=None, enable_cache=True, use_slots=False):
     """Parse a file-like object to thrift module object, e.g.::
 
         >>> from thriftpy.parser.parser import parse_fp
@@ -530,6 +539,7 @@ def parse_fp(source, module_name, lexer=None, parser=None, enable_cache=True):
     :param parser: ply parser to use, if not provided, `parse` will new one.
     :param enable_cache: if this is set to be `True`, parsed module will be
                          cached by `module_name`, this is enabled by default.
+    :param use_slots: if set to `True` uses slots for struct members
     """
     if not module_name.endswith('_thrift'):
         raise ThriftParserError('ThriftPy can only generate module with '
@@ -546,6 +556,8 @@ def parse_fp(source, module_name, lexer=None, parser=None, enable_cache=True):
         lexer = lex.lex()
     if parser is None:
         parser = yacc.yacc(debug=False, write_tables=0)
+
+    parser.__use_slots__ = use_slots
 
     data = source.read()
 
@@ -747,9 +759,18 @@ def _make_enum(name, kvs):
     return cls
 
 
-def _make_empty_struct(name, ttype=TType.STRUCT, base_cls=TPayload):
+def _make_empty_struct(name, ttype=TType.STRUCT, base_cls=TPayload, slots=[]):
     attrs = {'__module__': thrift_stack[-1].__name__, '_ttype': ttype}
+    if issubclass(base_cls, TSPayload):
+        attrs['__slots__'] = slots
     return type(name, (base_cls, ), attrs)
+
+
+def _field_names(fields):
+    fnames = []
+    for _, _, _, name, _ in fields:
+        fnames.append(name)
+    return fnames
 
 
 def _fill_in_struct(cls, fields, _gen_init=True):

@@ -10,7 +10,9 @@
 from __future__ import absolute_import
 
 import functools
+import itertools
 import linecache
+import operator
 import types
 
 from ._compat import with_metaclass
@@ -165,6 +167,57 @@ class TPayload(with_metaclass(TPayloadMeta, object)):
 
     def __ne__(self, other):
         return not self.__eq__(other)
+
+
+# XXX: Move payload methods into separate sharable location
+class TSPayload(with_metaclass(TPayloadMeta, object)):
+
+    __hash__ = None
+
+    __slots__ = tuple()
+
+    def read(self, iprot):
+        iprot.read_struct(self)
+
+    def write(self, oprot):
+        oprot.write_struct(self)
+
+    def __repr__(self):
+        keys = itertools.chain.from_iterable(
+            getattr(cls, '__slots__', tuple()) for cls in type(self).__mro__
+        )
+        keys = list(keys)
+        values = operator.attrgetter(*keys)(self)
+        l = ['%s=%r' % (key, value) for key, value in zip(keys, values)]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(l))
+
+    def __str__(self):
+        return repr(self)
+
+    def __eq__(self, other):
+        if not isinstance(other, self.__class__):
+            return False
+        keys = itertools.chain.from_iterable(
+            getattr(cls, '__slots__', tuple()) for cls in type(self).__mro__
+        )
+        keys = list(keys)
+        getter = operator.attrgetter(*keys)
+        return getter(self) == getter(other)
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
+    def __getstate__(self):
+        keys = itertools.chain.from_iterable(
+            getattr(cls, '__slots__', tuple()) for cls in type(self).__mro__
+        )
+        keys = list(keys)
+        values = operator.attrgetter(*keys)(self)
+        return tuple(zip(keys, values))
+
+    def __setstate__(self, state):
+        for k, v in state:
+            setattr(self, k, v)
 
 
 class TClient(object):
