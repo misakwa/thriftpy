@@ -209,21 +209,17 @@ def p_enum_item(p):
 
 def p_struct(p):
     '''struct : seen_struct '{' field_seq '}' '''
-    name, pos = p[1]
-    use_slots = p.parser.__use_slots__
-    val = _make_empty_struct(
-        name,
-        base_cls=TSPayload if use_slots else TPayload,
-        slots=_field_names(p[3]) if use_slots else [],
-    )
-    val = _fill_in_struct(val, p[3])
-    setattr(thrift_stack[pos], name, val)
+    val = _fill_in_struct(p[1], p[3])
     _add_thrift_meta('structs', val)
 
 
 def p_seen_struct(p):
     '''seen_struct : STRUCT IDENTIFIER '''
-    p[0] = (p[2], len(thrift_stack)-1)
+    use_slots = p.parser.__use_slots__
+    base_cls = TSPayload if use_slots else TPayload
+    val = _make_empty_struct(p[2], base_cls=base_cls)
+    setattr(thrift_stack[-1], p[2], val)
+    p[0] = val
 
 
 def p_union(p):
@@ -234,7 +230,9 @@ def p_union(p):
 
 def p_seen_union(p):
     '''seen_union : UNION IDENTIFIER '''
-    val = _make_empty_struct(p[2])
+    use_slots = p.parser.__use_slots__
+    base_cls = TSPayload if use_slots else TPayload
+    val = _make_empty_struct(p[2], base_cls=base_cls)
     setattr(thrift_stack[-1], p[2], val)
     p[0] = val
 
@@ -268,7 +266,8 @@ def p_service(p):
     else:
         extends = None
 
-    val = _make_service(p[2], p[len(p) - 2], extends)
+    use_slots = p.parser.__use_slots__
+    val = _make_service(p[2], p[len(p) - 2], extends, use_slots=use_slots)
     setattr(thrift, p[2], val)
     _add_thrift_meta('services', val)
 
@@ -766,18 +765,9 @@ def _make_enum(name, kvs):
     return cls
 
 
-def _make_empty_struct(name, ttype=TType.STRUCT, base_cls=TPayload, slots=[]):
+def _make_empty_struct(name, ttype=TType.STRUCT, base_cls=TPayload):
     attrs = {'__module__': thrift_stack[-1].__name__, '_ttype': ttype}
-    if issubclass(base_cls, TSPayload):
-        attrs['__slots__'] = slots
     return type(name, (base_cls, ), attrs)
-
-
-def _field_names(fields):
-    fnames = []
-    for _, _, _, name, _ in fields:
-        fnames.append(name)
-    return fnames
 
 
 def _fill_in_struct(cls, fields, _gen_init=True):
@@ -797,6 +787,10 @@ def _fill_in_struct(cls, fields, _gen_init=True):
     setattr(cls, 'thrift_spec', thrift_spec)
     setattr(cls, 'default_spec', default_spec)
     setattr(cls, '_tspec', _tspec)
+    # add __slots__ so we can check way before the class is created, even though
+    # it really does nothing here, the real work is done during instantiation
+    if issubclass(cls, TSPayload):
+        cls.__slots__ = tuple(field for field, _ in default_spec)
     if _gen_init:
         gen_init(cls, thrift_spec, default_spec)
     return cls
@@ -808,11 +802,14 @@ def _make_struct(name, fields, ttype=TType.STRUCT, base_cls=TPayload,
     return _fill_in_struct(cls, fields, _gen_init=_gen_init)
 
 
-def _make_service(name, funcs, extends):
+def _make_service(name, funcs, extends, use_slots=False):
     if extends is None:
         extends = object
 
     attrs = {'__module__': thrift_stack[-1].__name__}
+    base_cls = TSPayload if use_slots else TPayload
+    if use_slots:
+        attrs['__slots__'] = tuple()
     cls = type(name, (extends, ), attrs)
     thrift_services = []
 
@@ -821,7 +818,7 @@ def _make_service(name, funcs, extends):
         # args payload cls
         args_name = '%s_args' % func_name
         args_fields = func[3]
-        args_cls = _make_struct(args_name, args_fields)
+        args_cls = _make_struct(args_name, args_fields, base_cls=base_cls)
         setattr(cls, args_name, args_cls)
         # result payload cls
         result_name = '%s_result' % func_name
@@ -829,7 +826,7 @@ def _make_service(name, funcs, extends):
         result_throws = func[4]
         result_oneway = func[0]
         result_cls = _make_struct(result_name, result_throws,
-                                  _gen_init=False)
+                                  _gen_init=False, base_cls=base_cls)
         setattr(result_cls, 'oneway', result_oneway)
         if result_type != TType.VOID:
             result_cls.thrift_spec[0] = _ttype_spec(result_type, 'success')
