@@ -9,10 +9,13 @@
 
 from __future__ import absolute_import
 
+try:
+    import copy_reg as copyreg
+except ImportError:
+    import copyreg
+
 import functools
-import itertools
 import linecache
-import operator
 import types
 
 from ._compat import with_metaclass
@@ -136,57 +139,27 @@ class TPayloadMeta(type):
             attrs["__init__"] = init_func_generator(cls, spec)
         return super(TPayloadMeta, cls).__new__(cls, name, bases, attrs)
 
-# checks: instance and subclass checks
-    def __instancecheck__(cls, inst):
-        mod = inst.__class__.__module__
-        name = inst.__class__.__name__
-        key = "%s:%s" % (mod, name)
-        repl_cls = TPayloadMeta._class_cache.get(key)
-        if repl_cls is None:
-            return type.__instancecheck__(cls, inst)
-        return inst.__class__ is repl_cls
-
-    def __subclasscheck__(cls, subcls):
-        mod = cls.__module__
-        name = cls.__name__
-        key = "%s:%s" % (mod, name)
-        repl_cls = TPayloadMeta._class_cache.get(key)
-        if repl_cls is None:
-            return type.__subclasscheck__(cls, subcls)
-        if cls == repl_cls:
-            return True
-        # the first class in __mro__ is replaced by the replacement class so we
-        # can only look up from the second position
-        return cls.__mro__[1] in repl_cls.__mro__
-# eo: checks
-
     def __call__(cls, *args, **kw):
-        if not cls.__mro__[1] == TSPayload:
-            return super(TPayloadMeta, cls).__call__(cls, *args, **kw)
-        # XXX: replaces class with new class using slot list from default_spec
+        # if issubclass(cls, TSPayload):
+        if not issubclass(cls, TSPayload):
+            return type.__call__(cls, *args, **kw)
         cls_name = cls.__name__.split('.')[-1]
         cache_key = '%s:%s' % (cls.__module__, cls_name)
-        # XXX: we trust default_spec more than __slots__ for this
-        fields = tuple(field for field, _ in cls.default_spec)
-        cls_obj = TPayloadMeta._class_cache.get(cache_key)
-        if not cls_obj:
-            cls_obj = type(
+        kls = TPayloadMeta._class_cache.get(cache_key)
+        if not kls:
+            fields = [field for field, _ in cls.default_spec]
+            kls = type(
                 cls_name,
-                cls.__mro__,
+                (cls,),
                 {
                     '__slots__': fields,
                     '__module__': cls.__module__,
                 }
             )
-            # XXX: need a better way to do this; its a dupe from parser.py
-            cls_obj._ttype = cls._ttype
-            cls_obj._tspec = cls._tspec
-            cls_obj.default_spec = cls.default_spec
-            cls_obj.thrift_spec = cls.thrift_spec
-            # cls.__init__ is already bound to cls
-            cls_obj.__init__ = init_func_generator(cls_obj, cls.default_spec)
-            TPayloadMeta._class_cache[cache_key] = cls_obj
-        return type.__call__(cls_obj, *args, **kw)
+            TPayloadMeta._class_cache[cache_key] = kls
+            fn = lambda obj: (cls, tuple(getattr(obj, f) for f in fields))
+            copyreg.pickle(kls, fn)
+        return type.__call__(kls, *args, **kw)
 
 
 def gen_init(cls, thrift_spec=None, default_spec=None):
@@ -236,11 +209,8 @@ class TSPayload(with_metaclass(TPayloadMeta, object)):
         oprot.write_struct(self)
 
     def __repr__(self):
-        keys = itertools.chain.from_iterable(
-            getattr(cls, '__slots__', tuple()) for cls in type(self).__mro__
-        )
-        keys = list(keys)
-        values = operator.attrgetter(*keys)(self)
+        keys = self.__slots__
+        values = [getattr(self, k) for k in keys]
         l = ['%s=%r' % (key, value) for key, value in zip(keys, values)]
         return '%s(%s)' % (self.__class__.__name__, ', '.join(l))
 
@@ -250,27 +220,13 @@ class TSPayload(with_metaclass(TPayloadMeta, object)):
     def __eq__(self, other):
         if not isinstance(other, self.__class__):
             return False
-        keys = itertools.chain.from_iterable(
-            getattr(cls, '__slots__', tuple()) for cls in type(self).__mro__
-        )
-        keys = list(keys)
-        getter = operator.attrgetter(*keys)
-        return getter(self) == getter(other)
+        keys = self.__slots__
+        vals1 = [getattr(self, k) for k in keys]
+        vals2 = [getattr(self, k) for k in keys]
+        return vals1 == vals2
 
     def __ne__(self, other):
         return not self.__eq__(other)
-
-    def __getstate__(self):
-        keys = itertools.chain.from_iterable(
-            getattr(cls, '__slots__', tuple()) for cls in type(self).__mro__
-        )
-        keys = list(keys)
-        values = operator.attrgetter(*keys)(self)
-        return tuple(zip(keys, values))
-
-    def __setstate__(self, state):
-        for k, v in state:
-            setattr(self, k, v)
 
 
 class TClient(object):

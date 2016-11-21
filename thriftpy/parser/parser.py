@@ -767,6 +767,8 @@ def _make_enum(name, kvs):
 
 def _make_empty_struct(name, ttype=TType.STRUCT, base_cls=TPayload):
     attrs = {'__module__': thrift_stack[-1].__name__, '_ttype': ttype}
+    if issubclass(base_cls, TSPayload):
+        attrs['__slots__'] = []
     return type(name, (base_cls, ), attrs)
 
 
@@ -787,10 +789,9 @@ def _fill_in_struct(cls, fields, _gen_init=True):
     setattr(cls, 'thrift_spec', thrift_spec)
     setattr(cls, 'default_spec', default_spec)
     setattr(cls, '_tspec', _tspec)
-    # add __slots__ so we can check way before the class is created, even though
-    # it really does nothing here, the real work is done during instantiation
+    # add __slots__ for easy introspection
     if issubclass(cls, TSPayload):
-        cls.__slots__ = tuple(field for field, _ in default_spec)
+        cls.__slots__ = [field for field, _ in default_spec]
     if _gen_init:
         gen_init(cls, thrift_spec, default_spec)
     return cls
@@ -808,8 +809,7 @@ def _make_service(name, funcs, extends, use_slots=False):
 
     attrs = {'__module__': thrift_stack[-1].__name__}
     base_cls = TSPayload if use_slots else TPayload
-    if use_slots:
-        attrs['__slots__'] = tuple()
+    # service class itself will not be created with slots
     cls = type(name, (extends, ), attrs)
     thrift_services = []
 

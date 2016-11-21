@@ -82,38 +82,54 @@ def test_load_slots():
     )
 
     # normal structs will have slots
-    # assert set(thrift.PhoneNumber.__slots__) == set(['type', 'number', 'mix_item'])
-    # assert set(thrift.Person.__slots__) == set(['name', 'phones', 'created_at'])
-    # assert set(thrift.AddressBook.__slots__) == set(['people'])
-    # assert set(thrift.AddressBookService.__slots__) == set()
+    assert thrift.PhoneNumber.__slots__ == ['type', 'number', 'mix_item']
+    assert thrift.Person.__slots__ == ['name', 'phones', 'created_at']
+    assert thrift.AddressBook.__slots__ == ['people']
 
-    # one cannot get/set undefined attributes
-    # person = thrift.Person()
-    # with pytest.raises(AttributeError):
-    #     person.attr_not_exist = "Does not work"
+    # get/set undefined attributes
+    person = thrift.Person()
+    with pytest.raises(AttributeError):
+        person.attr_not_exist = "Does not work"
 
-    # with pytest.raises(AttributeError):
-    #     person.attr_not_exist
+    with pytest.raises(AttributeError):
+        person.attr_not_exist
 
-    # pn = thrift.PhoneNumber()
-    # with pytest.raises(AttributeError):
-    #     pn.attr_not_exist = "Does not work"
+    pn = thrift.PhoneNumber()
+    with pytest.raises(AttributeError):
+        pn.attr_not_exist = "Does not work"
 
-    # with pytest.raises(AttributeError):
-    #     pn.attr_not_exist
+    with pytest.raises(AttributeError):
+        pn.attr_not_exist
 
-    # ab = thrift.AddressBook()
-    # with pytest.raises(AttributeError):
-    #     ab.attr_not_exist = "Does not work"
+    ab = thrift.AddressBook()
+    with pytest.raises(AttributeError):
+        ab.attr_not_exist = "Does not work"
 
-    # with pytest.raises(AttributeError):
-    #     ab.attr_not_exist
+    with pytest.raises(AttributeError):
+        ab.attr_not_exist
+    # eo: get/set
 
     # exceptions will not have slots
-    # assert not hasattr(thrift.PersonNotExistsError, '__slots__')
+    assert not hasattr(thrift.PersonNotExistsError, '__slots__')
 
     # enums will not have slots
-    # assert not hasattr(thrift.PhoneType, '__slots__')
+    assert not hasattr(thrift.PhoneType, '__slots__')
+
+    # service itself will not be created with slots
+    assert not hasattr(thrift.AddressBookService, '__slots__')
+
+    # service args will have slots
+    args_slots = thrift.AddressBookService.get_phonenumbers_args.__slots__
+    assert args_slots == ['name', 'count']
+
+    # XXX: service result will have their slot list empty until after they are
+    # created. This is because the success field is inserted after calling
+    # _make_struct. We could hardcode a check in the metaclass for names ending
+    # with _result, but I'm unsure if its a good idea. This should usually not
+    # be an issue since this object is only used internally, but we can revisit
+    # the need to have it available when required.
+    result_obj = thrift.AddressBookService.get_phonenumbers_result()
+    assert result_obj.__slots__ == ['success']
 
     # should be able to pickle slotted objects - if load with module_name
     bob = thrift.Person(name="Bob")
