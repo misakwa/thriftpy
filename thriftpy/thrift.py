@@ -220,9 +220,9 @@ class TSPayload(with_metaclass(TPayloadMeta, object)):
         if not isinstance(other, self.__class__):
             return False
         keys = self.__slots__
-        vals1 = [getattr(self, k) for k in keys]
-        vals2 = [getattr(self, k) for k in keys]
-        return vals1 == vals2
+        this = [getattr(self, k) for k in keys]
+        other_ = [getattr(other, k) for k in keys]
+        return this == other_
 
     def __ne__(self, other):
         return not self.__eq__(other)
