@@ -122,14 +122,8 @@ def test_load_slots():
     args_slots = thrift.AddressBookService.get_phonenumbers_args.__slots__
     assert args_slots == ['name', 'count']
 
-    # XXX: service result will have their slot list empty until after they are
-    # created. This is because the success field is inserted after calling
-    # _make_struct. We could hardcode a check in the metaclass for names ending
-    # with _result, but I'm unsure if its a good idea. This should usually not
-    # be an issue since this object is only used internally, but we can revisit
-    # the need to have it available when required.
-    result_obj = thrift.AddressBookService.get_phonenumbers_result()
-    assert result_obj.__slots__ == ['success']
+    result_slots = thrift.AddressBookService.get_phonenumbers_result.__slots__
+    assert result_slots == ['success']
 
     # should be able to pickle slotted objects - if load with module_name
     bob = thrift.Person(name="Bob")

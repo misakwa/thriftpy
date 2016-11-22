@@ -833,6 +833,8 @@ def _make_service(name, funcs, extends, use_slots=False):
             result_cls.default_spec.insert(0, ('success', None))
         gen_init(result_cls, result_cls.thrift_spec, result_cls.default_spec)
         setattr(cls, result_name, result_cls)
+        # default spec is modified after making struct so add slots here
+        result_cls.__slots__ = [f for f, _ in result_cls.default_spec]
         thrift_services.append(func_name)
     if extends is not None and hasattr(extends, 'thrift_services'):
         thrift_services.extend(extends.thrift_services)
