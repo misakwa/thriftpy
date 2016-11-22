@@ -140,7 +140,6 @@ class TPayloadMeta(type):
         return super(TPayloadMeta, cls).__new__(cls, name, bases, attrs)
 
     def __call__(cls, *args, **kw):
-        # if issubclass(cls, TSPayload):
         if not issubclass(cls, TSPayload):
             return type.__call__(cls, *args, **kw)
         cls_name = cls.__name__.split('.')[-1]
