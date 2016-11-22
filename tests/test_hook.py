@@ -130,3 +130,10 @@ def test_load_slots():
     p_str = pickle.dumps(bob)
 
     assert pickle.loads(p_str) == bob
+
+    # works for recursive types too
+    rec = thriftpy.load('parser-cases/recursive_union.thrift', use_slots=True)
+    rec_slots = rec.Dynamic.__slots__
+    assert rec_slots == ['boolean', 'integer', 'doubl', 'str', 'arr', 'object']
+    with pytest.raises(AttributeError):
+        rec.Dynamic.attr_not_exist = "shouldn't work"
